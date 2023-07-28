@@ -1,0 +1,95 @@
+﻿@page "/setting"
+@using CommunityToolkit.Maui.Storage
+@using Microsoft.Maui.Controls
+
+@inject IJSRuntime JS
+
+<h3>Setting</h3>
+
+<br />
+<div class="input-group">
+    <span class="input-group-text">backup path</span>
+    <input class="form-control" type="text" @bind="backupPathTemp"/>
+    <button class="btn btn-outline-secondary" type="button" @onclick="chooseFolder">
+        <span class="oi oi-move"></span>
+    </button>
+</div>
+<br />
+<div class="btn-group">
+    <button type="button" class="btn btn-secondary" @onclick="Redo">Clear unsaved changes</button>
+    <button type="button" class="btn btn-primary" @onclick="saveAndMigrate">Save & Migrate</button>
+</div>
+
+@code {
+    protected override async void OnAfterRender(bool firstRender)
+    {
+        var fsReadPermissionStatus = await Permissions.CheckStatusAsync<Permissions.StorageRead>();
+        if (fsReadPermissionStatus == PermissionStatus.Granted) return;
+        if (Permissions.ShouldShowRationale<Permissions.StorageRead>())
+        {
+            await Shell.Current.DisplayAlert("permission request", "need storage read permission.", "ok");
+        }
+        fsReadPermissionStatus = await Permissions.CheckStatusAsync<Permissions.StorageRead>();
+
+
+        var fsWritePermissionStatus = await Permissions.CheckStatusAsync<Permissions.StorageWrite>();
+        if (fsWritePermissionStatus == PermissionStatus.Granted) return;
+        if (Permissions.ShouldShowRationale<Permissions.StorageWrite>())
+        {
+            await Shell.Current.DisplayAlert("permission request", "need storage write permission.", "ok");
+        }
+        fsWritePermissionStatus = await Permissions.CheckStatusAsync<Permissions.StorageWrite>();
+    }
+    private string backupPathTemp = Settings.DupPath;
+    private void Redo()
+    {
+        backupPathTemp = Settings.DupPath;
+    }
+    private async Task chooseFolder()
+    {
+        CancellationToken cancellationToken = new();
+        var result = await FolderPicker.Default.PickAsync(cancellationToken);
+        if (result.IsSuccessful)
+        {
+            backupPathTemp = result.Folder.Path;
+        }
+    }
+    private Task saveAndMigrate()
+    {
+        return Task.Run(async () =>
+        {
+            try
+            {
+                // check if new Path same as old setting
+                if (backupPathTemp == Settings.DupPath)
+                {
+                    return;
+                }
+
+                // check if new Path is valid
+                if (!Directory.Exists(backupPathTemp))
+                {
+                    await JS.InvokeVoidAsync("alert", "Path doesn't exists.");
+                    return;
+                }
+
+                var doubleCheck = await JS.InvokeAsync<bool>("confirm", "are you sure?");
+
+                if (doubleCheck)
+                {
+                    var testFile = Path.Combine(backupPathTemp, "test.txt");
+                    File.WriteAllText(testFile, "test");
+                    File.Delete(testFile);
+                    Directory.Move(Settings.DupPath, backupPathTemp);
+                    Settings.DupPath = backupPathTemp;
+                    await JS.InvokeVoidAsync("console.log", "migration finished.");
+                }
+            }
+            catch (Exception ex)
+            {
+                await JS.InvokeVoidAsync("alert", $"Can't create file in Path.\n {ex.Message}");
+                return;
+            }
+        });
+    }
+}

@@ -1,0 +1,117 @@
+﻿@page "/tasklist"
+@using CommunityToolkit.Maui.Storage
+@using BackuperCore;
+@inject BackuperInMaui _backuper;
+
+<h3>TaskList</h3>
+<br />
+@if (_isDbConnected)
+{
+    <ul class="list-group">
+        @if (_tasks.Count == 0)
+        {
+            <div class="alert alert-info">have no task.</div>
+        } else
+        {
+            @foreach (var item in _tasks)
+            {
+                <li class="list-group-item">
+                    <button class="btn btn-primary" type="button" @onclick="(() => OnBackup(item))">backup</button>
+                    <button class="btn btn-info" type="button" @onclick="(() => OnRestore(item))">restore</button>
+                    <button class="btn btn btn-danger" type="button" @onclick="(() => OnDelete(item))">Delete</button>
+                    <label class="form-check-label" for="firstCheckbox">@item.Name</label>
+                    <label class="form-check-label" for="firstCheckbox">@item.SrcFolder</label>
+                </li>
+            }
+        }
+    </ul>
+} else
+{
+    <div class="alert alert-danger">database disconnected!</div>
+}
+
+@code {
+    private async Task OnBackup(TaskMetadata item)
+    {
+        try
+        {
+            using (var orm = await _backuper.GetOrmAsync())
+            {
+                var task = new BackupTask(item.SrcFolder, Settings.DupPath, orm, item);
+                await task.BackupAsync();
+            }
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // request _dupPath directory writing and reading permission
+            PermissionStatus status = await Permissions.RequestAsync<Permissions.LocationWhenInUse>();
+        }
+        catch (Exception)
+        {
+
+            throw;
+        }
+    }
+    private async Task OnRestore(TaskMetadata item)
+    {
+        try
+        {
+            using (var orm = await _backuper.GetOrmAsync())
+            {
+                var task = new BackupTask(item.SrcFolder, Settings.DupPath, orm, item);
+                await task.RestoreAsync();
+            }
+        }
+        catch (Exception)
+        {
+
+            throw;
+        }
+    }
+    private async Task OnDelete(TaskMetadata item)
+    {
+        try
+        {
+            using (var orm = await _backuper.GetOrmAsync())
+            {
+                var task = new BackupTask(item.SrcFolder, Settings.DupPath, orm, item);
+                File.Delete(task.DupPath);
+                orm.TaskMetadata.Remove(item);
+                await orm.SaveChangesAsync();
+                await RefreshAfterCrud();
+            }
+        }
+        catch (Exception)
+        {
+            //
+            throw;
+        }
+    }
+    private async Task RefreshAfterCrud()
+    {
+        _tasks = _pointer.ToList();
+    }
+    private bool _isDbConnected;
+    //private Backuper _backuper;
+    private AppDbCtx _database;
+    private IQueryable<TaskMetadata> _pointer;
+    private List<TaskMetadata> _tasks;
+    protected override async Task OnInitializedAsync()
+    {
+        //_backuper = new Backuper(Settings.DupPath, Settings.SqlitePath);
+        try
+        {
+            await _backuper.EnsureTableCreatedAsync();
+            _database = await _backuper.GetOrmAsync();
+            _pointer = _database.TaskMetadata.Where(item => true).Take(Settings.TaskListLimit);
+            _tasks = _pointer.ToList();
+            _isDbConnected = true;
+        }
+        catch (Exception)
+        {
+            _isDbConnected = false;
+        }
+    }
+}
+
+
