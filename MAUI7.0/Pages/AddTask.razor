@@ -1,0 +1,54 @@
+﻿@page "/addtask"
+@inject BackuperInMaui _backuper;
+@using CommunityToolkit.Maui.Storage;
+<h3>AddTask</h3>
+
+<div class="mb-3">
+    <label for="exampleFormControlInput1" class="form-label">Title</label>
+    <input type="email" class="form-control" id="exampleFormControlInput1" @bind="_title" placeholder="Put new task name here">
+</div>
+<div class="mb-3">
+    <label for="exampleFormControlTextarea1" class="form-label">Description</label>
+    <textarea class="form-control" id="exampleFormControlTextarea1" rows="3" @bind="_description" placeholder="Add description here."></textarea>
+</div>
+<div class="input-group">
+    <button class="btn border-dark" @onclick="ChooseFolder">
+        <span class="oi oi-folder"></span>
+    </button>
+    <input class="form-control" type="text" @bind="_path"/>
+</div>
+<br />
+<button class="btn btn-primary" @onclick="OnSave">Save</button>
+
+
+@code {
+    private async Task ChooseFolder()
+    {
+        CancellationToken cancellationToken = new();
+        var dir = await FolderPicker.Default.PickAsync(cancellationToken);
+        if (dir.IsSuccessful)
+        {
+            _path = dir.Folder.Path;
+        }
+    }
+    private string _title = string.Empty;
+    private string _description = string.Empty;
+    private string _path = string.Empty;
+    private async Task OnSave()
+    {
+        try
+        {
+            await _backuper.CreateTaskAsync(_title, _description, _path);
+        }
+        catch (Exception)
+        {
+            throw;
+        }
+        finally
+        {
+            _title = string.Empty;
+            _description = string.Empty;
+            _path = string.Empty;
+        }
+    }
+}
